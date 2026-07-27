@@ -6,7 +6,10 @@ const workspaceSchema = new mongoose.Schema({
   members: [{
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     email: { type: String, required: true },
+    name: { type: String },
+    title: { type: String }, // NEW — job role/title, e.g. "Developer", "Designer", "PM"
     role: { type: String, enum: ['admin', 'member'], default: 'member' },
+    status: { type: String, enum: ['pending', 'active'], default: 'pending' },
   }],
   settings: {
     defaultIntegration: { type: String, enum: ['jira', 'linear', 'notion'], default: 'jira' },

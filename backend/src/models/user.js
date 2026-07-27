@@ -13,14 +13,6 @@ const userSchema = new mongoose.Schema({
       cloudId: String,
       connected: { type: Boolean, default: false },
     },
-    linear: {
-      accessToken: String,
-      connected: { type: Boolean, default: false },
-    },
-    notion: {
-      accessToken: String,
-      connected: { type: Boolean, default: false },
-    },
   },
 }, { timestamps: true });
 

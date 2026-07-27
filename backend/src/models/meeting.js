@@ -16,12 +16,6 @@ const meetingSchema = new mongoose.Schema({
   summary: String,
   decisions: [String],
   unresolvedIssues: [String],
-  roiScore: {
-    totalCost: Number,
-    decisionsCount: Number,
-    actionItemsCount: Number,
-    efficiencyScore: Number,
-  },
 }, { timestamps: true });
 
 meetingSchema.index({ workspaceId: 1, createdAt: -1 });

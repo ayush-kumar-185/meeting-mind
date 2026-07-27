@@ -1,13 +1,19 @@
 import { Outlet } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { AppSidebar } from '../components/AppSidebar';
 
 export default function DashboardLayout() {
   return (
-    <div className="dashboard-shell">
-      <Sidebar />
-      <main className="dashboard-content">
-        <Outlet />
+    <SidebarProvider>
+      <AppSidebar />
+      <main className="flex-1 overflow-y-auto bg-neutral-50">
+        <div className="p-4 border-b bg-white flex items-center">
+          <SidebarTrigger />
+        </div>
+        <div className="p-8">
+          <Outlet />
+        </div>
       </main>
-    </div>
+    </SidebarProvider>
   );
 }
