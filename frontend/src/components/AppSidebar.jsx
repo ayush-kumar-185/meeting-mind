@@ -51,8 +51,10 @@ export function AppSidebar() {
   const handleLogout = async () => {
     try {
       await api.post('/auth/logout');
-    } finally {
+      localStorage.removeItem('token');
       navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
     }
   };
 
