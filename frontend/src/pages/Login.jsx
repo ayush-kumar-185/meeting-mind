@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default function Login() {
-  console.log("ALL VITE ENV VARS:", import.meta.env);
   const handleGoogleLogin = () => {
     const BASE_URL = import.meta.env.VITE_API_URL;
     window.location.href = `${BASE_URL}/auth/google`;
