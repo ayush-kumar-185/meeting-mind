@@ -3,11 +3,6 @@
 
 MeetingMind is an AI meeting intelligence platform. Rather than serving as just a transcription tool, it takes a raw transcript as input and focuses squarely on the post-meeting accountability layer: structured extraction, attribution, and follow-through.
 
-## Demo
-`[Demo GIF here]`
-
-`[Live link here]`
-
 ## Features
 - **AI Extraction**: Paste a transcript, and Gemini extracts a structured summary, key decisions, unresolved issues, and per-person action items (with priority and inferred deadlines). We also extract softer verbal commitments. Null and empty-array fallbacks are explicitly handled when data isn't present to prevent hallucinated content.
 - **Accountability Tools**: Push real issues to Jira (via Atlassian OAuth 2.0), trigger per-attendee follow-up emails filtered to show only their own items (via Resend), and schedule 24-hour advance reminders using BullMQ.
