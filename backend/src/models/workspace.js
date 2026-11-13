@@ -18,4 +18,6 @@ const workspaceSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+workspaceSchema.index({ 'members.userId': 1 });
+
 module.exports = mongoose.model('Workspace', workspaceSchema);

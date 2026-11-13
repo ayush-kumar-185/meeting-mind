@@ -13,9 +13,11 @@ const meetingSchema = new mongoose.Schema({
   }],
   rawTranscript: { type: String, required: true },
   status: { type: String, enum: ['processing', 'ready', 'failed'], default: 'processing' },
+  errorDetails: String,
   summary: String,
   decisions: [String],
   unresolvedIssues: [String],
+  followUpsSentTo: [{ type: String }],
 }, { timestamps: true });
 
 meetingSchema.index({ workspaceId: 1, createdAt: -1 });

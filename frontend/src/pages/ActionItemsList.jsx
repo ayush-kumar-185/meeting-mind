@@ -15,6 +15,7 @@ export default function ActionItemsList() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState(null);
   const [scope, setScope] = useState('mine'); // 'mine' | 'all'
+  const [pushingItems, setPushingItems] = useState({});
   const loadItems = () => {
     setLoading(true);
     setError(null);
@@ -46,9 +47,51 @@ export default function ActionItemsList() {
 
   const handlePushToJira = async (itemId) => {
     try {
-      const res = await api.post(`/action-items/${itemId}/push/jira`);
-      setItems(prev => prev.map(i => i._id === itemId ? res.data.actionItem : i));
+      setPushingItems(prev => ({ ...prev, [itemId]: true }));
+      await api.post(`/action-items/${itemId}/push/jira`);
+      
+      const maxAttempts = 10;
+      let attempts = 0;
+      
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const params = { scope };
+          if (statusFilter !== 'all') params.status = statusFilter;
+          const res = await api.get('/action-items', { params });
+          
+          const updatedItems = res.data.actionItems;
+          const updatedItem = updatedItems.find(i => i._id === itemId);
+          
+          if (updatedItem?.pushedTo?.some(p => p.tool === 'jira')) {
+            clearInterval(poll);
+            setItems(updatedItems);
+            setPushingItems(prev => {
+              const next = { ...prev };
+              delete next[itemId];
+              return next;
+            });
+            toast.success('Successfully pushed to Jira!');
+          } else if (attempts >= maxAttempts) {
+            clearInterval(poll);
+            setPushingItems(prev => {
+              const next = { ...prev };
+              delete next[itemId];
+              return next;
+            });
+            toast.info('Jira push is taking a while. It will appear soon.');
+          }
+        } catch (e) {
+          // ignore polling errors
+        }
+      }, 2000);
+
     } catch (err) {
+      setPushingItems(prev => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
       console.error('Push to Jira failed:', err.response?.data?.error || err.message);
       toast.error(err.response?.data?.error || 'Failed to push to Jira');
     }
@@ -136,8 +179,16 @@ export default function ActionItemsList() {
               variant="outline"
               className="bg-muted text-primary font-semibold hover:bg-secondary h-8 px-3"
               onClick={() => handlePushToJira(item._id)}
+              disabled={pushingItems[item._id]}
             >
-              Push to Jira
+              {pushingItems[item._id] ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Pushing...
+                </>
+              ) : (
+                'Push to Jira'
+              )}
             </Button>
           ) : !isJiraConnected && !isDone ? (
             <div className="text-xs text-muted-foreground hover:text-primary transition-colors">

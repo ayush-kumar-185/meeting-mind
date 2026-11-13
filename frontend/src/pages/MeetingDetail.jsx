@@ -296,7 +296,7 @@ export default function MeetingDetail() {
                     {meeting.attendees.map((attendee, i) => (
                       <div key={i} className="flex items-center justify-between group cursor-pointer p-1.5 -mx-1.5 rounded-lg hover:bg-muted">
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${i % 3 === 0 ? 'bg-primary text-white' : i % 3 === 1 ? 'bg-secondary text-primary-foreground' : 'bg-secondary text-foreground'
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${i % 3 === 0 ? 'bg-primary text-white' : i % 3 === 1 ? 'bg-secondary text-secondary-foreground' : 'bg-muted text-foreground'
                             }`}>
                             {attendee.name.substring(0, 2).toUpperCase()}
                           </div>
@@ -402,7 +402,7 @@ export default function MeetingDetail() {
                             ) : isJiraConnected ? (
                               <button
                                 onClick={() => handlePushToJira(item._id)}
-                                className="inline-flex items-center gap-1px-3 py-1.5 bg-card border border-border rounded text-xs font-bold text-foreground hover:bg-muted transition-colors opacity-100 md:opacity-0 group-hover:opacity-100 ml-auto px-3"
+                                className="inline-flex items-center gap-1px-3 py-1.5 bg-card border border-border rounded text-xs font-bold text-foreground hover:bg-muted transition-colors opacity-100 ml-auto px-3"
                               >
                                 + Jira
                               </button>

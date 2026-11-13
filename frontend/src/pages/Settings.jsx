@@ -24,8 +24,6 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
-const BASE_URL = import.meta.env.VITE_API_URL;
-
 export default function Settings() {
   const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState([]);
@@ -37,6 +35,7 @@ export default function Settings() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
   const [pendingInvites, setPendingInvites] = useState([]);
   const [deletingWorkspaceId, setDeletingWorkspaceId] = useState(null);
+  const [connectingJira, setConnectingJira] = useState(false);
 
   const loadWorkspaces = () => {
     api.get('/workspaces')
@@ -61,6 +60,16 @@ export default function Settings() {
 
   useEffect(() => {
     loadWorkspaces();
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('jira_connected') === 'true') {
+      toast.success('Jira connected successfully!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('jira_error')) {
+      const err = params.get('jira_error');
+      toast.error(`Jira connection failed: ${err.replace(/_/g, ' ')}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   const handleAcceptInvite = async (workspaceId) => {
@@ -91,6 +100,22 @@ export default function Settings() {
       loadWorkspaces();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to remove member');
+    }
+  };
+
+  const handleConnectJira = async () => {
+    try {
+      setConnectingJira(true);
+      const res = await api.get('/auth/jira/url');
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      } else {
+        toast.error('Failed to get Jira authorization URL');
+        setConnectingJira(false);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to initiate Jira connection');
+      setConnectingJira(false);
     }
   };
 
@@ -398,11 +423,19 @@ export default function Settings() {
                   </Button>
                 ) : (
                   <Button
-                    asChild
                     size="sm"
-                    className="text-[#5b21b6] bg-transparent border border-[#5b21b6]/20 hover:bg-[#5b21b6]/5 font-medium"
+                    disabled={connectingJira}
+                    onClick={handleConnectJira}
+                    className="text-[#5b21b6] bg-transparent border border-[#5b21b6]/20 hover:bg-[#5b21b6]/5 font-medium cursor-pointer"
                   >
-                    <a href={`${BASE_URL}/auth/jira/connect`}>Connect</a>
+                    {connectingJira ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      'Connect'
+                    )}
                   </Button>
                 )}
               </div>

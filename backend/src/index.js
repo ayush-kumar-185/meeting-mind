@@ -24,9 +24,21 @@ const { scheduleWeeklyPatternDetection } = require('./jobs/detectPatterns');
 require('./jobs/processMeeting');
 require('./jobs/detectPatterns'); // starts the worker
 require('./jobs/flagOverdue'); // starts the overdue worker
+require('./jobs/emailWorker'); // starts the email worker
+require('./jobs/jiraWorker'); // starts the jira worker
 
 
 
+
+if (!process.env.FRONTEND_URL) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL ERROR: FRONTEND_URL environment variable is not defined.');
+    process.exit(1);
+  } else {
+    console.warn('WARNING: FRONTEND_URL not defined. Falling back to http://localhost:3000 for development.');
+    process.env.FRONTEND_URL = 'http://localhost:3000';
+  }
+}
 
 const app = express();
 
@@ -42,11 +54,11 @@ app.use(passport.initialize());
 
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.use('/auth/jira', jiraAuthRoutes);
 app.use('/auth', authRoutes);
 app.use('/workspaces', workspaceRoutes);
 app.use('/meetings', meetingRoutes);
 app.use('/action-items', actionItemRoutes);
-app.use('/auth/jira', jiraAuthRoutes);
 app.use('/commitments', commitmentRoutes);
 app.use('/patterns', patternRoutes);
 

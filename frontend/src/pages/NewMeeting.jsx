@@ -8,7 +8,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileUp, FileText, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function NewMeeting() {
   const [workspaces, setWorkspaces] = useState([]);
@@ -18,6 +19,10 @@ export default function NewMeeting() {
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('30');
   const [transcript, setTranscript] = useState('');
+  const [inputMode, setInputMode] = useState('paste'); // 'paste', 'upload', 'preview'
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedWordCount, setExtractedWordCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -58,7 +63,71 @@ export default function NewMeeting() {
       const next = new Set(prev);
       next.has(email) ? next.delete(email) : next.add(email);
       return next;
-    });
+      });
+  };
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+
+    const validTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const validExtensions = ['.txt', '.pdf', '.docx'];
+    
+    if (!validTypes.includes(file.type) && !validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))) {
+      toast.error('Unsupported file type. Please upload a TXT, DOCX, or PDF transcript.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('This file is too large to process. Please use a smaller file (max 10MB) or paste the transcript.');
+      return;
+    }
+
+    setExtracting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const res = await api.post('/meetings/parse-transcript', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setTranscript(res.data.text);
+      setExtractedWordCount(res.data.wordCount);
+      setUploadedFile(res.data.fileName);
+      setInputMode('preview');
+      toast.success('Transcript extracted successfully!');
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to extract transcript from file.';
+      toast.error(msg);
+      setError(msg);
+      setUploadedFile(null);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleDragOver = (e) => e.preventDefault();
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+  
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFileUpload(e.target.files[0]);
+    }
+    // reset input value so the same file can be selected again
+    e.target.value = null;
+  };
+
+  const clearFile = () => {
+    setUploadedFile(null);
+    setTranscript('');
+    setExtractedWordCount(0);
+    setInputMode('upload');
   };
 
   const handleSubmit = async (e) => {
@@ -202,19 +271,123 @@ export default function NewMeeting() {
         {/* Right Column: Transcript Area */}
         <div className="lg:col-span-8 flex flex-col lg:h-[calc(100vh-160px)] lg:min-h-175 h-auto bg-card border border-border rounded-xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)] overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-card shrink-0">
-            <h3 className="text-headline-md font-bold text-foreground text-xl">Raw Transcript</h3>
-            <span className="bg-muted text-muted-foreground text-xs font-semibold px-2.5 py-1 rounded-full border border-border/50">Auto-detecting language</span>
+            <h3 className="text-headline-md font-bold text-foreground text-xl">
+              {inputMode === 'preview' ? 'Transcript Preview' : 'Transcript Import'}
+            </h3>
+            {inputMode !== 'preview' && (
+              <div className="flex bg-muted p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setInputMode('paste')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${inputMode === 'paste' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Paste Text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode('upload')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${inputMode === 'upload' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Upload File
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="flex-1 relative bg-muted/50 min-h-75 hover:bg-muted transition-colors focus-within:bg-card! focus-within:shadow-[inset_0_0_0_1px_rgba(91,33,182,0.2)]">
-            <Textarea
-              placeholder={`Paste the raw meeting transcript here, or type notes...\n\nMeetingMind will extract:\n• Core decisions made\n• Assigned action items\n• Key recurring patterns`}
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              required
-              className="h-full w-full text-base font-medium text-foreground leading-relaxed resize-none focus:outline-none placeholder:text-muted-foreground bg-transparent hover:bg-transparent! focus-within:bg-transparent! shadow-none border-none border-0! p-6 items-start rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              rows={15}
-            />
+          <div className="flex-1 relative bg-muted/50 min-h-0 flex flex-col">
+            {inputMode === 'paste' && (
+              <div className="flex-1 overflow-y-auto min-h-0 hover:bg-muted transition-colors focus-within:bg-card! focus-within:shadow-[inset_0_0_0_1px_rgba(91,33,182,0.2)]">
+                <Textarea
+                  placeholder={`Paste the raw meeting transcript here, or type notes...\n\nMeetingMind will extract:\n• Core decisions made\n• Assigned action items\n• Key recurring patterns`}
+                  value={transcript}
+                  onChange={(e) => setTranscript(e.target.value)}
+                  className="h-full w-full text-base font-medium text-foreground leading-relaxed resize-none focus:outline-none placeholder:text-muted-foreground bg-transparent hover:bg-transparent! focus-within:bg-transparent! shadow-none border-none border-0! p-6 items-start rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  style={{ fieldSizing: 'fixed' }}
+                  rows={15}
+                />
+              </div>
+            )}
+
+            {inputMode === 'upload' && (
+              <div 
+                className={`flex-1 flex flex-col items-center justify-center p-8 border-2 border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-all m-6 rounded-xl ${extracting ? 'pointer-events-none' : ''}`}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                {extracting ? (
+                  <div className="flex flex-col items-center text-center">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+                    <h4 className="text-lg font-semibold text-foreground">Extracting Text...</h4>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                      Please wait while we read your document. This might take a few moments for larger files.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                      <FileUp className="w-8 h-8 text-primary" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-foreground mb-1">Upload Transcript File</h4>
+                    <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                      Drag and drop your file here, or click to browse. We support .txt, .docx, and .pdf files.
+                    </p>
+                    <Label 
+                      htmlFor="transcript-upload" 
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2.5 rounded-md font-medium cursor-pointer transition-colors"
+                    >
+                      Browse Files
+                    </Label>
+                    <input 
+                      id="transcript-upload" 
+                      type="file" 
+                      className="hidden" 
+                      accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {inputMode === 'preview' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="bg-primary/5 border-b border-primary/10 p-4 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-background p-2 rounded border border-border shadow-sm">
+                      <FileText className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{uploadedFile}</p>
+                      <p className="text-xs text-muted-foreground">{extractedWordCount} words extracted</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="transcript-replace" className="text-xs font-medium text-primary hover:text-primary/80 cursor-pointer px-3 py-1.5 bg-background border border-border rounded-md shadow-sm transition-colors">
+                      Replace
+                    </Label>
+                    <input 
+                      id="transcript-replace" 
+                      type="file" 
+                      className="hidden" 
+                      accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={handleFileChange}
+                    />
+                    <button type="button" onClick={clearFile} className="text-xs font-medium text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-md transition-colors border border-transparent hover:border-destructive/20">
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto min-h-0 hover:bg-muted transition-colors focus-within:bg-card! focus-within:shadow-[inset_0_0_0_1px_rgba(91,33,182,0.2)]">
+                  <Textarea
+                    value={transcript}
+                    onChange={(e) => setTranscript(e.target.value)}
+                    className="h-full w-full text-base font-medium text-foreground leading-relaxed resize-none focus:outline-none placeholder:text-muted-foreground bg-transparent hover:bg-transparent! focus-within:bg-transparent! shadow-none border-none border-0! p-6 items-start rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    style={{ fieldSizing: 'fixed' }}
+                    rows={12}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="p-5 border-t border-border bg-card flex flex-col sm:flex-row items-center justify-between shrink-0 gap-4">

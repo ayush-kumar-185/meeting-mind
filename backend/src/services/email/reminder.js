@@ -3,7 +3,10 @@ const { ActionItem } = require('../../models');
 
 async function sendReminderEmail(actionItemId) {
   const item = await ActionItem.findById(actionItemId);
-  if (!item) throw new Error('Action item not found');
+  if (!item) {
+    console.log(`Action item ${actionItemId} not found, skipping reminder`);
+    return;
+  }
 
   // Skip if already done, or if somehow missing assignee email
   if (item.status === 'done') {

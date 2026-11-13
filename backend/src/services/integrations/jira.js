@@ -23,8 +23,14 @@ async function getValidJiraToken(userId) {
 
     return { accessToken: access_token, cloudId: user.integrations.jira.cloudId };
   } catch (err) {
-    console.error('Jira token refresh failed:', err.response?.data || err.message);
-    throw new Error('Failed to refresh Jira token — user may need to reconnect');
+    if (err.response && [400, 401, 403].includes(err.response.status)) {
+      user.integrations.jira.connected = false;
+      await user.save();
+      console.error('Jira authorization revoked or invalid:', err.response?.data || err.message);
+      throw new Error('Jira authorization revoked. Please reconnect.');
+    }
+    console.error('Jira token refresh failed temporarily:', err.response?.data || err.message);
+    throw new Error('Failed to reach Jira.');
   }
 }
 

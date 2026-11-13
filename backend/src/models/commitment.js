@@ -9,6 +9,7 @@ const commitmentSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   commitment: { type: String, required: true },
+  originalCommitment: String,
   deadline: Date,
   status: { type: String, enum: ['pending', 'fulfilled', 'broken', 'overdue'], default: 'pending' },
   followUpSentAt: Date,

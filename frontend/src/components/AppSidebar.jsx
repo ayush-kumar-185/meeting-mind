@@ -82,7 +82,7 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       tooltip={link.label}
                       isActive={active}
-                      onClick={() => navigate(link.to)}
+                      render={<NavLink to={link.to} />}
                       className={`cursor-pointer flex items-center gap-2 ${active ? 'font-medium text-primary' : ''}`}
                     >
                       <Icon size={18} className="shrink-0 pointer-events-none" />

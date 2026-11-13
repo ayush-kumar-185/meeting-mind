@@ -5,12 +5,28 @@ const { User } = require('../models');
 
 const router = express.Router();
 
-// Step 1: redirect user to Atlassian consent screen
+// Step 1: get Jira authorization URL or redirect user to Atlassian consent screen
+router.get('/url', requireAuth, (req, res) => {
+  const scopes = ['read:jira-work', 'write:jira-work', 'offline_access'].join(' ');
+  const state = req.user._id.toString();
+
+  const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.JIRA_CLIENT_ID}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(process.env.JIRA_CALLBACK_URL)}&state=${state}&response_type=code&prompt=consent`;
+
+  res.json({ url: authUrl });
+});
+
 router.get('/connect', requireAuth, (req, res) => {
   const scopes = ['read:jira-work', 'write:jira-work', 'offline_access'].join(' ');
   const state = req.user._id.toString(); // pass userId through state to identify on callback
 
   const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${process.env.JIRA_CLIENT_ID}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(process.env.JIRA_CALLBACK_URL)}&state=${state}&response_type=code&prompt=consent`;
+
+  const isJsonRequest = req.query.json === 'true' || 
+    (req.headers.accept?.includes('application/json') && !req.headers.accept?.includes('text/html'));
+
+  if (isJsonRequest) {
+    return res.json({ url: authUrl });
+  }
 
   res.redirect(authUrl);
 });
@@ -19,8 +35,8 @@ router.get('/connect', requireAuth, (req, res) => {
 router.get('/callback', async (req, res) => {
   const { code, state: userId } = req.query;
 
-  if (!code) {
-    return res.redirect(`${process.env.FRONTEND_URL}/dashboard/settings?jira_error=missing_code`);
+  if (!code || !userId) {
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard/settings?jira_error=missing_code_or_state`);
   }
 
   try {

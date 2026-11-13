@@ -32,6 +32,9 @@ function validateExtraction(data) {
 }
 
 async function extractFromTranscript(transcript, attendees = [], retries = 2) {
+  if (transcript && transcript.length > 100000) {
+    throw new Error('Transcript exceeds the maximum allowed length of 100,000 characters.');
+  }
   const prompt = buildExtractionPrompt(transcript, attendees);
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -78,16 +81,21 @@ Return ONLY valid JSON matching this exact schema, no markdown, no preamble, no 
 {
   "summary": "2-3 sentence summary of what the meeting was about",
   "decisions": ["concrete decisions that were made"],
-  "unresolvedIssues": ["open questions or unresolved conflicts, if any"],
+  "unresolvedIssues": ["open questions, undecided topics, unresolved conflicts, or unclear investigations (NOT concrete tasks)"],
   "actionItems": [
     { "title": "short imperative title", "description": "one sentence of context", "assignee": "name or null", "deadline": "YYYY-MM-DD or null", "priority": "high|medium|low" }
   ],
   "commitments": [
-    { "madeBy": "name", "commitment": "what they committed to", "deadline": "YYYY-MM-DD or null" }
+    { "madeBy": "name", "commitment": "what they explicitly committed to doing", "deadline": "YYYY-MM-DD or null" }
   ]
 }
 
 Rules:
+- CLASSIFICATION DISTINCTION:
+  - Action Item: A concrete task that needs to be DONE (e.g. "We need to verify Redis"). Even if it's unassigned, if it's a concrete task, it's an Action Item.
+  - Unresolved Issue: A topic that needs to be decided, clarified, or agreed upon (e.g. "We haven't decided whether to deploy on Friday"). DO NOT classify unassigned Action Items as Unresolved Issues.
+  - Decision: If an issue reaches a conclusion (e.g. "We decided to deploy Monday"), it is a Decision, NOT an Unresolved Issue.
+  - Commitment: If a person explicitly commits to a task (e.g. "Ayush: I'll complete testing by Friday"), capture it as BOTH an Action Item AND a Commitment.
 - If no clear owner is stated for an action item, set assignee to null. Do not guess based on who talks most.
 - If no deadline is mentioned, set deadline to null. Do not invent dates.
 - decisions and unresolvedIssues can be empty arrays if none exist — do not fabricate content to fill them.

@@ -2,18 +2,28 @@ const express = require('express');
 const requireAuth = require('../middleware/auth');
 const  ActionItem= require('../models/actionItem');
 const  Workspace  = require('../models/workspace');
-const { pushActionItemToJira } = require('../services/integrations/jira');
+const { jiraQueue } = require('../lib/queue');
 const validate = require('../middleware/validate');
 const validateObjectId = require('../middleware/validateObjectId');
 const { actionItemSchemas } = require('../validation/schemas');
+const { verifyWorkspaceAccess } = require('../middleware/workspaceAuth');
+const Meeting = require('../models/meeting');
+const rateLimit = require('../middleware/rateLimit');
 
 const router = express.Router();
 
 router.use(requireAuth);
+router.use(rateLimit(100, 60)); // Standard limit for all action item endpoints
 
 // List action items for a meeting
 router.get('/meeting/:meetingId', validateObjectId('meetingId'), async (req, res) => {
   try {
+    const meeting = await Meeting.findById(req.params.meetingId);
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+    if (!(await verifyWorkspaceAccess(req.user._id, meeting.workspaceId))) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
     const items = await ActionItem.find({ meetingId: req.params.meetingId })
       .sort({ createdAt: 1 });
     res.json({ actionItems: items });
@@ -25,6 +35,14 @@ router.get('/meeting/:meetingId', validateObjectId('meetingId'), async (req, res
 // List all action items across the user's workspaces (for the Action Items tab)
 router.get('/', async (req, res) => {
   try {
+    let page = parseInt(req.query.page);
+    if (isNaN(page) || page < 1) page = 1;
+    let limit = parseInt(req.query.limit);
+    if (isNaN(limit) || limit < 1) limit = 50;
+    limit = Math.min(limit, 100);
+    
+    const skip = (page - 1) * limit;
+
     const workspaces = await Workspace.find({ 'members.userId': req.user._id }).select('_id');
     const workspaceIds = workspaces.map(w => w._id);
 
@@ -37,8 +55,19 @@ router.get('/', async (req, res) => {
       filter['assignee.email'] = req.user.email; // default: only items assigned to me
     }
 
-    const items = await ActionItem.find(filter).sort({ deadline: 1, createdAt: -1 });
-    res.json({ actionItems: items });
+    const items = await ActionItem.find(filter)
+      .sort({ deadline: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({ 
+      actionItems: items,
+      pagination: {
+        page,
+        limit,
+        hasMore: items.length === limit
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -47,14 +76,18 @@ router.get('/', async (req, res) => {
 // Update an action item (edit text, reassign, change deadline/priority)
 router.patch('/:id', validateObjectId('id'), validate(actionItemSchemas.update), async (req, res) => {
   try {
-    const allowedFields = ['title', 'description', 'assignee', 'deadline', 'priority'];
-    const updates = {};
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    const item = await ActionItem.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Action item not found' });
+    if (!(await verifyWorkspaceAccess(req.user._id, item.workspaceId))) {
+      return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const item = await ActionItem.findByIdAndUpdate(req.params.id, updates, { new: true });
-    if (!item) return res.status(404).json({ error: 'Action item not found' });
+    const allowedFields = ['title', 'description', 'assignee', 'deadline', 'priority'];
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) item[field] = req.body[field];
+    }
+    
+    await item.save();
 
     res.json({ actionItem: item });
   } catch (err) {
@@ -70,12 +103,14 @@ router.patch('/:id/status', validateObjectId('id'), validate(actionItemSchemas.u
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const item = await ActionItem.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
+    const item = await ActionItem.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Action item not found' });
+    if (!(await verifyWorkspaceAccess(req.user._id, item.workspaceId))) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    item.status = status;
+    await item.save();
 
     res.json({ actionItem: item });
   } catch (err) {
@@ -86,8 +121,12 @@ router.patch('/:id/status', validateObjectId('id'), validate(actionItemSchemas.u
 // Delete a false-positive extraction
 router.delete('/:id', validateObjectId('id'), async (req, res) => {
   try {
-    const item = await ActionItem.findByIdAndDelete(req.params.id);
+    const item = await ActionItem.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Action item not found' });
+    if (!(await verifyWorkspaceAccess(req.user._id, item.workspaceId))) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    await ActionItem.findByIdAndDelete(req.params.id);
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -95,22 +134,28 @@ router.delete('/:id', validateObjectId('id'), async (req, res) => {
 });
 
 // Push an action item to Jira
-router.post('/:id/push/jira', validateObjectId('id'), async (req, res) => {
+router.post('/:id/push/jira', rateLimit(10, 60), validateObjectId('id'), async (req, res) => {
   try {
     const item = await ActionItem.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Action item not found' });
+    if (!(await verifyWorkspaceAccess(req.user._id, item.workspaceId))) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
 
     const alreadyPushed = item.pushedTo.some(p => p.tool === 'jira');
     if (alreadyPushed) {
       return res.status(409).json({ error: 'Already pushed to Jira' });
     }
 
-    const pushResult = await pushActionItemToJira(req.user._id, item);
+    await jiraQueue.add('push-jira', 
+      { actionItemId: item._id.toString(), userId: req.user._id.toString() },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } }
+    );
 
-    item.pushedTo.push(pushResult);
-    await item.save();
-
-    res.json({ actionItem: item });
+    res.status(202).json({ 
+      message: 'Jira push queued',
+      actionItem: item // return existing item, frontend will have to poll or assume success for V1
+    });
   } catch (err) {
     console.error('Jira push failed:', err.message);
     res.status(500).json({ error: err.message });

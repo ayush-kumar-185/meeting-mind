@@ -9,6 +9,7 @@ const actionItemSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   title: { type: String, required: true },
+  originalTitle: String,
   description: String,
   deadline: Date,
   priority: { type: String, enum: ['high', 'medium', 'low'], default: 'medium' },
@@ -18,10 +19,11 @@ const actionItemSchema = new mongoose.Schema({
     externalId: String,
     externalUrl: String,
   }],
+  jiraPushLock: { type: Boolean, default: false },
   reminderSentAt: Date,
 }, { timestamps: true });
 
 actionItemSchema.index({ meetingId: 1 });
-actionItemSchema.index({ 'assignee.email': 1, status: 1 });
+actionItemSchema.index({ workspaceId: 1, 'assignee.email': 1, status: 1, deadline: 1 });
 
 module.exports = mongoose.model('ActionItem', actionItemSchema);

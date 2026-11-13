@@ -43,7 +43,6 @@ export default function Patterns() {
   const [patterns, setPatterns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [workspaceId, setWorkspaceId] = useState(null);
   const [message, setMessage] = useState(null);
 
   const loadPatterns = () => {
@@ -52,17 +51,13 @@ export default function Patterns() {
 
   useEffect(() => {
     loadPatterns();
-    api.get('/workspaces').then(res => {
-      if (res.data.workspaces.length) setWorkspaceId(res.data.workspaces[0]._id);
-    });
   }, []);
 
   const handleScanNow = async () => {
-    if (!workspaceId) return;
     setScanning(true);
     setMessage(null);
     try {
-      const res = await api.post(`/patterns/scan/${workspaceId}`);
+      const res = await api.post(`/patterns/scan`);
       if (res.data.skipped) {
         setMessage({ type: 'warning', text: res.data.reason });
       } else {
@@ -150,12 +145,20 @@ export default function Patterns() {
                     {typeLabels[p.type] || p.type}
                   </span>
                   
-                  <span className="text-xs font-medium text-[#4a4453] flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#7b7485]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Mentioned in {p.meetingIds.length} meetings
-                  </span>
+                  <div className="text-xs font-medium text-[#4a4453] flex flex-col items-end gap-1">
+                    <span className="flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#7b7485]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {p.occurrenceCount || p.meetingIds.length} occurrences
+                    </span>
+                    {p.firstDetectedAt && (
+                      <span className="text-[10px] text-[#7b7485]">First: {new Date(p.firstDetectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    )}
+                    {p.lastDetectedAt && (
+                      <span className="text-[10px] text-[#7b7485]">Last: {new Date(p.lastDetectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    )}
+                  </div>
                 </div>
                 
                 <h3 className="text-2xl font-bold text-[#0b1c30] mb-3 relative z-10">{p.description.split('.')[0]}</h3>
